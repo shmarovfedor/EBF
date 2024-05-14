@@ -28,7 +28,8 @@ then
     echo "Downloading and compiling AFL++"
     git clone --depth 1 https://github.com/AFLplusplus/AFLplusplus.git
     cd AFLplusplus
-    LLVM_CONFIG=$EBF_LLVM_CONFIG CC=$LLVM_CC CXX=$LLVM_CXX make -j4
+    LLVM_CONFIG=$EBF_LLVM_CONFIG CC=$LLVM_CC CXX=$LLVM_CXX make all -j
+    sudo make install
     cd ../
 fi
 cd ../
