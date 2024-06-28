@@ -1,1 +1,5 @@
 .idea/
+lib/
+pass/*.o
+pass/*.so
+pass/*.a
