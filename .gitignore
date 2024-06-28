@@ -3,3 +3,4 @@ lib/
 pass/*.o
 pass/*.so
 pass/*.a
+fuzzEngine/
