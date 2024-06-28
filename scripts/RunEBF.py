@@ -50,7 +50,7 @@ VALIDATOR_PROP = ""
 preprocessed_c_file = ""
 CONCURRENCY = False
 isValidateTestSuite = False
-correction_witness = ''
+correctionWitness = ''
 Tsanitizer = " -fsanitize=thread  "
 Usanitizer = " -fsanitize=address  "
 Compiler = " clang-14 "
@@ -92,7 +92,7 @@ def startLogging():
 
 
 # print the header content once the tool starts.
-def HeaderContent():
+def printHeaderContent():
     global versionInfo, VERSION
     print(f"{bcolors.WARNING}\n\n ****************** Running EBF Hybrid Tool ****************** \n\n{bcolors.ENDC}")
     if os.path.exists(versionInfo):
@@ -205,256 +205,13 @@ def initializeDir():
         shutil.rmtree(AFL_DIR)
     os.mkdir(AFL_DIR)
 
-def RunBMCEngine():
-    global BMC_Engine
-    logWord = "Generating Seed Inputs from "+ BMC_Engine
-    print('\n\n')
-    printLogWord(logWord)
-    if BMC_Engine == 'CBMC':
-        message = "\n\n CBMC is not supported in this version "
-        print(message)
-        exit(0)
-    elif BMC_Engine =='ESBMC':
-        GenerateInitialSeedBMC()
-    elif BMC_Engine == 'CSEQ':
-        message = "\n\n CSEQ is not supported in this version "
-        print(message)
-        exit(0)
-    elif BMC_Engine == 'DEAGLE':
-        message = "\n\n DEAGLE is not supported in this version "
-        print(message)
-        exit(0)
 
-# This function is for assert 0 instrumentation, it will check first which category, we only support 
-# reachability in this script. then we run the fusebmc instrumentation with appropriate flags to 
-# get the goals and the number of the goals. 
-# Then we pass the number of goals generated with the instrumented files (contains goal label).
-def initial_analyze():
-    global C_FILE,EBF_EXEX,category_property
-    if category_property=="reach":
-            #instrument the c file with _reach errors to generate seeds.
-        print("\n\nInstrumenting the program with different goals")
-        seeds_generation=EBF_SEEDـINSTRUMENTATION+SEP+'./FuSeBMC_instrument'
-        seed_flags=" --add-labels --add-label-after-loop --add-goal-at-end-of-func "
-        instrumented = os.path.splitext(os.path.basename(C_FILE))[0] + "_asserts.c"
-        NumberOfGoals2='theGoalsFile.txt'
-        if (not (os.path.isfile(seeds_generation))):
-            message = "\n\n Instrumentation binary is NOT exists!! "
-            print(message)
-            exit(0)
-        RunInstraForSeed=seeds_generation+' '+'--output '+instrumented+' ' +'--input'+' '+ C_FILE + ' '+seed_flags + ' --goal-output-file '+ NumberOfGoals2+' --check-concurrency ' 
-
-        file = open(EBF_LOG + SEP + "runinstra.log", "w")
-        file_err = open(EBF_LOG + SEP + "runErrorinstra.log", "w")
-        try: 
-            p = subprocess.run(RunInstraForSeed,stdout=file,stderr=file_err,shell=True,preexec_fn=limit_virtual_memory) #bufsize=1
-            if path.exists(NumberOfGoals2):
-                shutil.move(NumberOfGoals2,EBF_EXEX+SEP+NumberOfGoals2)
-            if path.exists(instrumented):
-                shutil.move(instrumented,EBF_EXEX+SEP+instrumented)
-        except:
-            print('we could not generate instrumentation files\n')
-            exit(0)
-        # opening the text file
-        with open(EBF_EXEX+SEP+NumberOfGoals2,'r') as file:
-    # reading each line    
-            for line in file:
-        # reading each word # number of goals       
-                for word in line.split():         
-                    GoalNumber=word
-        # Adding elements to the List
-        # using Iterator
-        GoalList=[]
-        for i in range(1, int(GoalNumber)+1):
-            GoalList.append(i)
-        print("\n\nFile contains ",GoalNumber, " goals")
-        addGoals(EBF_EXEX+SEP+instrumented,GoalList)
-    else:
-        return
-
-
-
-# This function will change each goal by reach_error function. 
-# First, we will set the MAX time for all the goal to be run, 
-# Second, we randomly chose the number of goal and change it to reach_error and save the file. 
-# Third, we pass the file and the goal number associated with it to runBMCForSeedGenerationONLY Function.
-
-def addGoals(instrumented_file,GoalList):
-    Max_number_goals=GoalList
-    seconds=150
-    end_time = time.time() + seconds
-    time_out=time.time() < end_time
-    for i in range(len(GoalList)):
-        if time.time() < end_time:
-            goal_choice=random.choice(GoalList)
-            goalword="GOAL_"+str(goal_choice)+":;"
-            print("\n\nAdding reach error in goal ",goal_choice," to the file to generate BMC seeds ")
-            reach_error_Cfile = os.path.splitext(os.path.basename(C_FILE))[0] + "_"+str(goal_choice)+"_reach.c"
-            instrumented_reach_error=EBF_EXEX+SEP+reach_error_Cfile
-            #print("file name ==",instrumented_reach_error)
-            fin = open(instrumented_file, "rt")
-            #output file to write the result to
-            fout = open(instrumented_reach_error, "wt")
-            #for each line in the input file
-            for line in fin:
-	        #read replace the string and write to output file
-	            fout.write(line.replace(goalword, 'reach_error();'))
-            #close input and output files
-            fin.close()
-            fout.close()
-            GoalList.remove(goal_choice)
-            runBMCForSeedGenerationONLY(instrumented_reach_error,goal_choice)
-        else:
-            print("\n\nWe exceed the time allocated for seed generation"+"\n\nWe are exiting the seed genertion")
-            break
-    
-
-# This function will run ESBMC for seed generation only. It receives the file that contains the reach error.
-# it will pass the directory where we saved the instrumented file
-def runBMCForSeedGenerationONLY(reacherror_CFILE,goal_choice):
-    #TODO you can make different wrapper for it. If you use ESBMC for the results and --compact-trace is affecting you can remove it.
-    global startTime, PROPERTY_FILE, STRATEGY_FILE, ARCHITECTURE, CONCURRENCY, witness_DIR_reacherr,process,main_process,C_FILE
-    InputGenerationPath = EBF_SCRIPTS + SEP + "esbmc-wrapper_ass.py"
-    if (not (os.path.isfile(InputGenerationPath))):
-        message = "Generating Input file is Not Exists!! "
-        print(message)
-    concurrency_arg = " -c " if CONCURRENCY else ""
-    concurrency_arg = ' -c '
-    STRATEGY_FILE = ' incr '
-    EBFRunCmd = "python3 " + InputGenerationPath + concurrency_arg + " -p " + PROPERTY_FILE + " -s " + STRATEGY_FILE + " -a " + str(
-        ARCHITECTURE) + " " + reacherror_CFILE +' -w ' + witness_DIR_reacherr+ " 1> " + EBF_LOG + SEP + "runCompiReacherrorBMC.log" + " 2> " + EBF_LOG + SEP + "runErrorReacherrorBMC_.log"
-    os.system(EBFRunCmd)
-    ConvertInitialSeed_reacherr(witness_DIR_reacherr,goal_choice)
-
-
-
-# This Function will convert ESBMC witness file to seeds for AFL++ 
-def ConvertInitialSeed_reacherr(witness_File_DIR,goal_choice):
-    global EBF_DIR, EBF_TESTCASE, EBF_CORPUS, witness_DIR,C_FILE
-    list = []
-    testcase2 = witness_File_DIR + SEP + os.path.splitext(os.path.basename(C_FILE))[0] + "_"+str(goal_choice)+"_reach.c.graphml"
-    if (not (os.path.isfile(testcase2) == True)):
-        logWord = "Proceeding"
-        printLogWord(logWord)
-    else:
-        testcase_xml = ET.parse(testcase2)
-        root = testcase_xml.getroot()
-        for x in root:
-            for child in x:
-                for item in child:
-                    if item.attrib['key'] == 'startline':
-                        startLine = int(item.text)
-                    elif item.attrib['key'] == 'assumption':
-                        assumption = item.text
-                        try:
-                            var, right = assumption.split("=")
-                            strip1=var.strip()
-                            if strip1=="threadid":
-                                continue
-                            left, _ = right.split(";")
-                            Item=left.strip()
-                            list.append(int(Item))
-                        except:
-                            pass
-        if len(list) == 0:
-            return
-        #count = 1
-        print("list",list)
-        new_list=[]
-        # Create bytearray
-        # (sequence of values in binary form)
-        # ASCII for A,B,C,D
-        for item in list:
-            bytesval=item.to_bytes(16, byteorder='big',signed=True) 
-            new_list.append(bytesval) 
-        #print("bytesvaltss",new_list)
-        # Bytearray can be cast to bytes
-        # Write bytes to file
-        with open(os.path.join(EBF_CORPUS, 'id-' + getRandomAlphanumericString()), "wb") as output:
-            output.write(bytesval)
-            #count += 1
-
-
-
-# This function run ESBMC to the original PUT without reach_error 
-def GenerateInitialSeedBMC():
-    global startTime, C_FILE, PROPERTY_FILE, STRATEGY_FILE, ARCHITECTURE, CONCURRENCY, witness_DIR
-
-    logWord = "Generating Seed Inputs"
-    print('\n\n')
-    printLogWord(logWord)
-    # Get the current working directory
-    #this wrapper has set the time and memory internally
-    InputGenerationPath = EBF_SCRIPTS + SEP + "esbmc-wrapper1.py"
-    if (not (os.path.isfile(InputGenerationPath))):
-        message = " Generating Input file is Not Exists!! "
-        print(message)
-    concurrency_arg = " -c " if CONCURRENCY else ""
-    concurrency_arg = ' -c '
-    STRATEGY_FILE = ' incr '
-    EBFRunCmd = "python3 " + InputGenerationPath + concurrency_arg + " -p " + PROPERTY_FILE + " -s " + STRATEGY_FILE + " -a " + str(
-        ARCHITECTURE) + ' -w ' + witness_DIR + " " + C_FILE + " 1> " + EBF_LOG + SEP + "runCompiBMC.log" + " 2> " + EBF_LOG + SEP + "runErrorBMC.log"
-    os.system(EBFRunCmd)
-
-
-
-# This function will convert ESBMC witness file to seeds for AFL
-def ConvertInitialSeed(witness_DIR):
-    global EBF_DIR, EBF_TESTCASE, EBF_CORPUS
-    list = []
-    testcase = witness_DIR + SEP + os.path.basename(C_FILE) + ".graphml"
-    if (not (os.path.isfile(testcase) == True)):
-        logWord = "Proceeding"
-        printLogWord(logWord)
-        RandomSeed()
-    else:
-        testcase_xml = ET.parse(testcase)
-        root = testcase_xml.getroot()
-        for x in root:
-            for child in x:
-                for item in child:
-                    if item.attrib['key'] == 'startline':
-                        startLine = int(item.text)
-                        # print ("startline", startLine)
-                        # list.append(startLine)
-                    elif item.attrib['key'] == 'assumption':
-                        assumption = item.text
-                        # assumption => threadid = %d;
-                        try:
-                            var, right = assumption.split("=")
-                            strip1=var.strip()
-                            if strip1=="threadid":
-                                continue
-                            left, _ = right.split(";")
-                            Item=left.strip()
-                            list.append(int(Item))
-                        except:
-                            pass
-        if len(list) == 0:
-            return
-        #count = 1
-        print("list",list)
-        new_list=[]
-        # Create bytearray
-        # (sequence of values in binary form)
-        # ASCII for A,B,C,D
-        for item in list:
-            bytesval=item.to_bytes(16, byteorder='big',signed=True) 
-            new_list.append(bytesval) 
-        #print("bytesvaltss\n",new_list)
-        # Bytearray can be cast to bytes
-        # Write bytes to file
-        with open(os.path.join(EBF_CORPUS, 'id-' + getRandomAlphanumericString()), "wb") as output:
-            output.write(bytesval)
-
-# This function will create a random numbers if ESBMC failed to do (if we activate the assert 0 this almost rare to happen)
-def RandomSeed():
+# This function will create a sequence of random
+def generateRandomSeed():
     global EBF_CORPUS, seed
     # TODO: Make each file contains 100 value
     if [f for f in os.listdir(EBF_CORPUS) if not f.startswith('.')] == []:
-        print("There is no Testcases generated From BMC ..Proceed to random inputs!\n\n")
-       # random.seed(seed)
-        #randomlist = random.sample(range(0, 5000), 15)
+        print("Generating a random seed\n")
         size = 10000
         some_bytes = os.urandom(size) 
         num_files = 1
@@ -629,7 +386,7 @@ def check_if_reach_error():
                 return False
 
 
-def AnalaysResults():
+def analizeResults():
     global RUN_LOG, AFL_DIR, RUN_STATUS_LOG
     PARALLEL_FUZZ=''
     if PARALLEL_FUZZ:
@@ -696,21 +453,6 @@ def AnalaysResults():
             RUN_LOG.write("UNKNOWN\n")
 
 
-def AnalaysResultsBMC():
-    checkBMC = open(EBF_LOG + SEP + "runCompiBMC.log", 'r')
-    read2 = checkBMC.read()
-    if "FALSE_REACH" in read2:
-        if "FALSE" in read2 and "reason for conflict" in read2:
-            RUN_LOG.write("UNKNOWN\n")
-        else:
-            RUN_LOG.write("False(reach)\n")
-    elif "TRUE" in read2:
-        RUN_LOG.write(" true\n")
-    elif "FALSE_OVERFLOW" in read2:
-        RUN_LOG.write(" False(overflow)\n")
-    else:
-        RUN_LOG.write("UNKNOWN\n")
-
 def TSANConfirm():
     runTSAN()
     checkTSAN = open(EBF_LOG + SEP + "TsanRunError.log", "r")
@@ -719,6 +461,7 @@ def TSANConfirm():
         return True
 
     return False
+
 
 def displayOutcome():
     global RUN_LOG, witness_DIR
@@ -761,7 +504,7 @@ def displayOutcome():
 
 # This function will check the log and decide which witness type should be returned. 
 
-def correction_witness():
+def correctionWitness():
     global RUN_LOG
     i = 0
     ESBMC_Results = 0
@@ -797,7 +540,7 @@ def correction_witness():
 
 # This function will move the files that contains witness info to the witness directory.
 def witnessFile_pre():
-    global witness_DIR, correction_witness
+    global witness_DIR, correctionWitness
     Source = os.getcwd()
     # Moves every witness into the Results folder
     for file in os.listdir(Source):
@@ -823,12 +566,12 @@ def witnessFile_pre():
 # This function will decide the type of witness and run WitnessFile.py which will generate the witness
 def witnessFile():
     a = ''
-    global witness_DIR, correction_witness
+    global witness_DIR, correctionWitness
     witnessFileGeneration = EBF_SCRIPTS + SEP + "WitnessFile.py"
     if (not (os.path.isfile(witnessFileGeneration))):
         message = " Generating witness file is Not Exists!! "
         print(message)
-    witness_type = "--witnessType=correct " if correction_witness() else "--witnessType=violation "
+    witness_type = "--witnessType=correct " if correctionWitness() else "--witnessType=violation "
     WitnessRunCmd = "python3 " + witnessFileGeneration + " -p " + PROPERTY_FILE + " -a " + str(
         ARCHITECTURE) + " " + ' ' + C_FILE + ' ' + witness_type + ' -w ' + witness_DIR + ' -l ' + EBF_LOG + ' -bmc '+ BMC_Engine
     os.system(WitnessRunCmd)
@@ -840,14 +583,14 @@ def main():
     start_time = time.time()
     processCommandLineArguements()
     initializeDir()
-    HeaderContent()
-    RandomSeed()
+    printHeaderContent()
+    generateRandomSeed()
     startLogging()
     corpusContentChecking()
     runAFL()
     #runTSAN()
     witnessFile_pre()
-    AnalaysResults()
+    analizeResults()
     witnessFile()
     displayOutcome()
     shutil.move(pre_C_File, EBF_EXEX)
