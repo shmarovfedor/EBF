@@ -53,7 +53,7 @@ isValidateTestSuite = False
 correction_witness = ''
 Tsanitizer = " -fsanitize=thread  "
 Usanitizer = " -fsanitize=address  "
-Compiler = " clang-11 "
+Compiler = " clang-14 "
 AFL_COMPILER_DIR = EBF_FUZZENGINE + SEP + "AFLplusplus"
 AFL_Bin = AFL_COMPILER_DIR + SEP + "./afl-clang-fast"
 AFL_FUZZ_Bin = AFL_COMPILER_DIR + SEP + "afl-fuzz "
@@ -514,11 +514,11 @@ def runAFL():
         if SetAnv in os.environ:
             pass
         else:
-            if path.exists('/usr/bin/clang-11'):
-                os.environ["AFL_CC"] = "/usr/bin/clang-11"
+            if path.exists('/usr/bin/clang-14'):
+                os.environ["AFL_CC"] = "/usr/bin/clang-14"
             else:
-                print(" Please set the environment \n export AFL_CC= clang-11")
-                os.environ["AFL_CC"] = "/usr/bin/clang-11"
+                print(" Please set the environment \n export AFL_CC= clang-14")
+                os.environ["AFL_CC"] = "/usr/bin/clang-14"
         AflExexutableFile = EBF_EXEX + SEP + Executable
         RunAfl = " AFL_LLVM_THREADSAFE_INST=1 " + AFL_Bin + Optimization + Compile_Flags + EBFـINSTRUMENTATION + pre_C_File + " " + \
                  " -lpthread " + "-L" + EBF_LIB + SEP + " -lmylib -lmylibFunctions " + ' -o ' + EBF_EXEX + SEP + Executable + " 1> " + EBF_LOG + SEP + "AflCompile.log" + " 2> " + EBF_LOG + SEP + "AflCompileError.log"
@@ -841,9 +841,6 @@ def main():
     processCommandLineArguements()
     initializeDir()
     HeaderContent()
-    initial_analyze()
-    RunBMCEngine()
-    ConvertInitialSeed(witness_DIR)
     RandomSeed()
     startLogging()
     corpusContentChecking()
@@ -851,7 +848,6 @@ def main():
     #runTSAN()
     witnessFile_pre()
     AnalaysResults()
-    AnalaysResultsBMC()
     witnessFile()
     displayOutcome()
     shutil.move(pre_C_File, EBF_EXEX)

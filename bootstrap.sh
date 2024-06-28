@@ -2,26 +2,28 @@
 
 echo "Starting release generation for EBF"
 
-echo "Building Pass"
+echo "Building Passes"
 mkdir -p build
 cd build
-cmake ../pass -DDCMAKE_CXX_COMPILER=$LLVM_CXX -DCMAKE_C_COMPILER=$LLVM_CC -DCMAKE_PREFIX_PATH=/usr/lib/llvm-11/
+cmake ../pass -DCMAKE_CXX_COMPILER=$LLVM_CXX -DCMAKE_C_COMPILER=$LLVM_CC -DCMAKE_PREFIX_PATH=$LLVM_LIBS
 cmake --build .
 cd ..
 
-echo "Building Libs"
+echo "Building Libraries"
 cd pass
-gcc myFunctionslib.c -c -g -o mylibFunctions.o && ar rcs libmylibFunctions.a mylibFunctions.o
-gcc myDelaylib.c -c -o mylib.o && ar rcs libmylib.a mylib.o
+$LLVM_CC myFunctionslib.c -c -g -o mylibFunctions.o && ar rcs libmylibFunctions.a mylibFunctions.o
+$LLVM_CC myDelaylib.c -c -o mylib.o && ar rcs libmylib.a mylib.o
 cd ..
+mkdir -p lib
+cp build/libMemoryTrackPass.so ./lib
+cp pass/*.a ./lib
+rm pass/*.a
+rm pass/*.o
+chmod +x ./lib/*
+rm -rf build/
 
-
-echo "Building Directories"
+echo "Building the Fuzz engine"
 mkdir -p fuzzEngine
-mkdir -p bin
-
-
-
 cd fuzzEngine
 if [[ ! -d AFLplusplus ]]
 then
@@ -34,25 +36,6 @@ then
 fi
 cd ../
 
-if [[ ! -d bin/esbmc ]]
-then
-    echo "Downloading and compiling ESBMC."
-    cd bin
-    chmod +x ESBMC-Linux.sh 
-    sh ./ESBMC-Linux.sh --skip-license 
-    mv bin/esbmc .
-    rm -rf bin
-    rm -rf license
-    rm README
-    rm release-notes.txt
-    cd ../
-fi
-
-echo "Copying files"
-cp build/libMemoryTrackPass.so ./lib
-cp pass/*.a ./lib
 chmod +x ./scripts/*
-chmod +x ./lib/*
-rm -rf build/
 echo "Done"
 

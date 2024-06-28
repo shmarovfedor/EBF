@@ -53,8 +53,7 @@ Clone EBF package and make sure SYSTEM REQUIREMENTS are correctly satisfied.
 
 Then install the dependencies :
 
-`EBF_LLVM_CONFIG=llvm-config-11 LLVM_CC=clang-11 LLVM_CXX=clang++-11 ./bootstrap.sh
-`
+`EBF_LLVM_CONFIG=llvm-config-14 LLVM_CC=clang-14 LLVM_CXX=clang++-14 LLVM_LIBS=/usr/lib/llvm-14 ./bootstrap.sh`
 
 
 ## Supporting engines:

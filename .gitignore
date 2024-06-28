@@ -4,3 +4,5 @@ pass/*.o
 pass/*.so
 pass/*.a
 fuzzEngine/
+*.graphml
+EBF_Results/
