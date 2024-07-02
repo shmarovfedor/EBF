@@ -33,35 +33,30 @@ EBF_BIN = EBF_DIR + SEP + "bin"
 CBMC = EBF_BIN + SEP + 'cbmc-sv'
 EBF_LOG = ''
 AFL_DIR = ''
-BMC_Engine=''
-AflExexutableFile = ''
 witness_DIR = ''
 witness_DIR_reacherr=''
 versionInfo = EBF_DIR + SEP + "versionInfoFolder" + SEP + "versionInfo.txt"
 start_time = 0
 PROPERTY_FILE = ""
 C_FILE = ''
-VERSION = ''
 STRATEGY_FILE = ""
 ARCHITECTURE = ""
 RUN_LOG = ""
 VALIDATOR_DIR = ""
 VALIDATOR_PROP = ""
-preprocessed_c_file = ""
 CONCURRENCY = False
 isValidateTestSuite = False
 correctionWitness = ''
 Tsanitizer = " -fsanitize=thread  "
-Usanitizer = " -fsanitize=address  "
+Asanitizer = " -fsanitize=address  "
 Compiler = " clang-14 "
 AFL_COMPILER_DIR = EBF_FUZZENGINE + SEP + "AFLplusplus"
-AFL_Bin = AFL_COMPILER_DIR + SEP + "./afl-clang-fast"
+AFL_Bin = AFL_COMPILER_DIR + SEP + "afl-clang-fast"
 AFL_FUZZ_Bin = AFL_COMPILER_DIR + SEP + "afl-fuzz "
 Optimization = " -g  "
 Compile_Flags = " -Xclang -load -Xclang "  # -std=gnu89
 TIMEOUT_AFL = 50  # kill if fuzzer reaches 420 s
-TIMEOUT_TSAN = 40#for esbmc 432, fuzzer 400 s and esbmc 9 m
-timeout =650
+timeout = 650
 seed = datetime.now().timestamp()
 MAX_VIRTUAL_MEMORY = 10000000000  # 10 GB
 pre_C_File = ''
@@ -93,7 +88,7 @@ def startLogging():
 
 # print the header content once the tool starts.
 def printHeaderContent():
-    global versionInfo, VERSION
+    global versionInfo
     print(f"{bcolors.WARNING}\n\n ****************** Running EBF Hybrid Tool ****************** \n\n{bcolors.ENDC}")
     if os.path.exists(versionInfo):
         displayCommand = "cat " + versionInfo
@@ -109,7 +104,7 @@ def printLogWord(logWord):
 
 # Create a command line needed from the user when starting the tool
 def processCommandLineArguements():
-    global C_FILE, PROPERTY_FILE, STRATEGY_FILE, ARCHITECTURE, category_property,CONCURRENCY, versionInfo, VERSION, OUTDIR, AFL_DIR, PARALLEL_FUZZ,BMC_Engine
+    global C_FILE, PROPERTY_FILE, STRATEGY_FILE, ARCHITECTURE, category_property,CONCURRENCY, versionInfo, OUTDIR, AFL_DIR, PARALLEL_FUZZ
     parser = argparse.ArgumentParser(prog="EBF", description="Tool for detecting concurrent and memory corruption bugs")
     parser.add_argument("-v", '--version', action='version', version='3.0.0')
     parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
@@ -117,8 +112,6 @@ def processCommandLineArguements():
     parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
     parser.add_argument("-c", "--concurrency", help="Set concurrency flag", action='store_true')
     parser.add_argument("-m", "--parallel", help="Set fuzzengine parallel flag ", action='store_true')
-    parser.add_argument( "-bmc", help="Set BMC engine", choices=["ESBMC", "CBMC", "CSEQ","DEAGLE"],
-                        default="ESBMC")
 
     args = parser.parse_args()
     PROPERTY_FILE = args.propertyfile
@@ -126,7 +119,6 @@ def processCommandLineArguements():
     ARCHITECTURE = args.arch
     CONCURRENCY = args.concurrency
     PARALLEL_FUZZ = args.parallel
-    BMC_Engine = args.bmc
 
     if C_FILE is None:
         exitMessage = " C File is not found. Please Rerun the Tool with Appropriate Arguments."
@@ -168,7 +160,7 @@ def getRandomAlphanumericString():
  
 
 # This function will initialize all the Directory needed for EBF.
-def initializeDir():
+def initializeOutputDirs():
     global EBF_CORPUS, OUTDIR, EBF_LOG, EBF_EXEX, witness_DIR, AFL_DIR, C_FILE,witness_DIR_reacherr
     if os.path.isdir(OUTDIR):
         shutil.rmtree(OUTDIR)
@@ -246,7 +238,7 @@ def corpusContentChecking():
 
 # This function will run AFL++ with the pass and runtime library
 def runAFL():
-    global EBF_EXEX, C_FILE,category_property ,OUTDIR, EBFـINSTRUMENTATION, AFL_DIR, RUN_LOG, TIMEOUT_AFL, start_time, AFL_COMPILER_DIR, preprocessed_c_file, pre_C_File, AFL_Bin, AFL_FUZZ_Bin, AflExexutableFile
+    global EBF_EXEX, C_FILE,category_property ,OUTDIR, EBFـINSTRUMENTATION, AFL_DIR, RUN_LOG, TIMEOUT_AFL, start_time, AFL_COMPILER_DIR, pre_C_File, AFL_Bin, AFL_FUZZ_Bin
     if category_property=='reach':
         extention_format=os.path.splitext(os.path.basename(C_FILE))[1]
         pre_C_File = EBF_DIR + SEP + "input"+extention_format
@@ -262,23 +254,14 @@ def runAFL():
                 os.path.isfile(EBF_LIB + SEP + "libmylibFunctions.a") == True))):
             exitMessage = " Either libmylib.a or libmylibFunctions.a File doesn't exist in " + EBF_LIB + "!!"
             sys.exit(exitMessage)
-        aflFlag = "AFL_BENCH_UNTIL_CRASH=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_SKIP_CPUFREQ=1 "
+        aflFlags = "AFL_BENCH_UNTIL_CRASH=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_SKIP_CPUFREQ=1"
         if os.path.exists(AFL_DIR):
             shutil.rmtree(AFL_DIR)
         os.mkdir(AFL_DIR)
-        Executable = os.path.splitext(os.path.basename(C_FILE))[0] + "_AFL"
-        SetAnv = "AFL_CC"
-        if SetAnv in os.environ:
-            pass
-        else:
-            if path.exists('/usr/bin/clang-14'):
-                os.environ["AFL_CC"] = "/usr/bin/clang-14"
-            else:
-                print(" Please set the environment \n export AFL_CC= clang-14")
-                os.environ["AFL_CC"] = "/usr/bin/clang-14"
-        AflExexutableFile = EBF_EXEX + SEP + Executable
-        RunAfl = " AFL_LLVM_THREADSAFE_INST=1 " + AFL_Bin + Optimization + Compile_Flags + EBFـINSTRUMENTATION + pre_C_File + " " + \
-                 " -lpthread " + "-L" + EBF_LIB + SEP + " -lmylib -lmylibFunctions " + ' -o ' + EBF_EXEX + SEP + Executable + " 1> " + EBF_LOG + SEP + "AflCompile.log" + " 2> " + EBF_LOG + SEP + "AflCompileError.log"
+        exe = os.path.splitext(os.path.basename(C_FILE))[0] + "_AFL"
+        aflExe = EBF_EXEX + SEP + exe
+        RunAfl = "AFL_CC=/usr/bin/clang-14 AFL_LLVM_THREADSAFE_INST=1 " + AFL_Bin + Optimization + Compile_Flags + EBFـINSTRUMENTATION + pre_C_File + " " + \
+                 " -lpthread " + "-L" + EBF_LIB + SEP + " -lmylib -lmylibFunctions " + ' -o ' + EBF_EXEX + SEP + exe + " 1> " + EBF_LOG + SEP + "AflCompile.log" + " 2> " + EBF_LOG + SEP + "AflCompileError.log"
         os.system(RunAfl)
         PARALLEL_FUZZ=''
         if PARALLEL_FUZZ:
@@ -286,9 +269,9 @@ def runAFL():
         else:
             logWord = "Invoking Fuzz Engine"
             printLogWord(logWord)
-            ExecuteAfl = aflFlag + " timeout -k 2s " + str(
-                TIMEOUT_AFL) + " " + AFL_FUZZ_Bin + " -i  " + EBF_CORPUS + " -o " + AFL_DIR + " -m none -t 3000+ -- " + AflExexutableFile + ' ' + " 1> " + EBF_LOG + SEP + "AflRun.log" + " 2> " + EBF_LOG + SEP + "AflrunError.log"
-            SetAflenv()
+            ExecuteAfl = aflFlags + " timeout -k 2s " + str(
+                TIMEOUT_AFL) + " " + AFL_FUZZ_Bin + " -i  " + EBF_CORPUS + " -o " + AFL_DIR + " -m none -t 3000+ -- " + aflExe + ' ' + " 1> " + EBF_LOG + SEP + "AflRun.log" + " 2> " + EBF_LOG + SEP + "AflrunError.log"
+            setAflEnv()
             os.system(ExecuteAfl)
         with open(EBF_LOG + SEP + "AflrunError.log", 'r') as f:
             print("ErrorLog")
@@ -334,22 +317,7 @@ def limit_virtual_memory():
     resource.setrlimit(resource.RLIMIT_AS, (MAX_VIRTUAL_MEMORY, resource.RLIM_INFINITY))
 
 
-# This function will run AFL if we set it to parallel fuzring.
-def ParallelFuzzing(inputs):
-    global EBF_EXEX, C_FILE, OUTDIR, EBFـINSTRUMENTATION, AFL_DIR, RUN_LOG, TIMEOUT_AFL, start_time, AFL_COMPILER_DIR, preprocessed_c_file, pre_C_File, AFL_Bin, AFL_FUZZ_Bin, AflExexutableFile,found_event
-    logWord = "Invoking Parrallel Fuzzing"
-    printLogWord(logWord)
-    (nodes, outdir, logfile1) = inputs
-
-    print("Starting node :{} with outdir {} and logfile {}".format(nodes, outdir, logfile1))
-    ExecuteAfl = " AFL_BENCH_UNTIL_CRASH=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_SKIP_CPUFREQ=1 " + " timeout -k 2s " + str(
-        TIMEOUT_AFL) + " " + AFL_FUZZ_Bin + " -i  " + EBF_CORPUS + " -o " + AFL_DIR + ' ' + nodes + ' ' + outdir + " -m none -t 3000+ -- " + AflExexutableFile + '  ' + " 1> " + EBF_LOG + SEP + logfile1 + " 2> " + EBF_LOG + SEP + "AflrunError.log"
-    final = subprocess.Popen("{}".format(ExecuteAfl), shell=True, universal_newlines=True,
-                             preexec_fn=limit_virtual_memory)
-    final.communicate()
-    found_event.set()
-
-def SetAflenv():
+def setAflEnv():
     global RUN_STATUS_LOG
     checkAflErrors = open(EBF_LOG + SEP + "AflCompileError.log")
     readAFLErr = checkAflErrors.read()
@@ -361,21 +329,6 @@ def SetAflenv():
         os.system(displayresults)
         exit(0)
 
-
-def runTSAN():
-    global Tsanitizer, EBF_EXEX, C_FILE, EBF_LOG, EBF_LIB, EBFـINSTRUMENTATION, TIMEOUT_TSAN, start_time
-    curTime = time.time()
-    timeElapsed = curTime - start_time
-    ExecutableTsan = os.path.splitext(os.path.basename(C_FILE))[0] + "_TSAN"
-    CompileTasan = Compiler + Optimization + Tsanitizer + " " + C_FILE + "  -lpthread " + EBF_LIB + SEP + "atomics.c " + EBF_LIB + SEP + "nondet_rand.c " + ' -o ' + EBF_EXEX + SEP + ExecutableTsan + " 1> " + EBF_LOG + SEP + "TsanCompile.log" + " 2> " + EBF_LOG + SEP + "TasanCompileError.log"
-    TSANExexutableFile = EBF_EXEX + SEP + "./" + ExecutableTsan
-    RunTsan = " timeout -k 2s " + str(
-        TIMEOUT_TSAN) + " " + TSANExexutableFile + " 1> " + EBF_LOG + SEP + "TsanRun.log" + " 2> " + EBF_LOG + SEP + "TsanRunError.log"
-    os.system(CompileTasan)
-    os.system(RunTsan)
-    logWord = "Runing Sanitizer"
-    printLogWord(logWord)
-
 def check_if_reach_error():
     for file in os.listdir(witness_DIR):
         if file.startswith("witnessInfoAFL-"):
@@ -384,7 +337,6 @@ def check_if_reach_error():
             read=check.read()
             if "REACH_ERROR END" in read:
                 return False
-
 
 def analizeResults():
     global RUN_LOG, AFL_DIR, RUN_STATUS_LOG
@@ -451,16 +403,6 @@ def analizeResults():
                     break
         else:
             RUN_LOG.write("UNKNOWN\n")
-
-
-def TSANConfirm():
-    runTSAN()
-    checkTSAN = open(EBF_LOG + SEP + "TsanRunError.log", "r")
-    read3 = checkTSAN.read()
-    if "thread leak" in read3:
-        return True
-
-    return False
 
 
 def displayOutcome():
@@ -573,7 +515,7 @@ def witnessFile():
         print(message)
     witness_type = "--witnessType=correct " if correctionWitness() else "--witnessType=violation "
     WitnessRunCmd = "python3 " + witnessFileGeneration + " -p " + PROPERTY_FILE + " -a " + str(
-        ARCHITECTURE) + " " + ' ' + C_FILE + ' ' + witness_type + ' -w ' + witness_DIR + ' -l ' + EBF_LOG + ' -bmc '+ BMC_Engine
+        ARCHITECTURE) + " " + ' ' + C_FILE + ' ' + witness_type + ' -w ' + witness_DIR + ' -l ' + EBF_LOG + ' -bmc ESBMC'
     os.system(WitnessRunCmd)
 
 
@@ -582,16 +524,15 @@ def main():
     global start_time
     start_time = time.time()
     processCommandLineArguements()
-    initializeDir()
+    initializeOutputDirs()
     printHeaderContent()
     generateRandomSeed()
     startLogging()
     corpusContentChecking()
     runAFL()
-    #runTSAN()
     witnessFile_pre()
     analizeResults()
-    witnessFile()
+    #witnessFile()
     displayOutcome()
     shutil.move(pre_C_File, EBF_EXEX)
     end_time = time.time()
