@@ -49,6 +49,7 @@ isValidateTestSuite = False
 correctionWitness = ''
 Tsanitizer = " -fsanitize=thread  "
 Asanitizer = " -fsanitize=address  "
+AFL_SANITIZER_FLAG = ""
 Compiler = " clang-14 "
 AFL_COMPILER_DIR = EBF_FUZZENGINE + SEP + "AFLplusplus"
 AFL_Bin = AFL_COMPILER_DIR + SEP + "afl-clang-fast"
@@ -104,7 +105,7 @@ def printLogWord(logWord):
 
 # Create a command line needed from the user when starting the tool
 def processCommandLineArguements():
-    global C_FILE, PROPERTY_FILE, STRATEGY_FILE, ARCHITECTURE, category_property,CONCURRENCY, versionInfo, OUTDIR, AFL_DIR, PARALLEL_FUZZ
+    global C_FILE, PROPERTY_FILE, STRATEGY_FILE, ARCHITECTURE, category_property,CONCURRENCY, versionInfo, OUTDIR, AFL_DIR, PARALLEL_FUZZ, AFL_SANITIZER_FLAG
     parser = argparse.ArgumentParser(prog="EBF", description="Tool for detecting concurrent and memory corruption bugs")
     parser.add_argument("-v", '--version', action='version', version='3.0.0')
     parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
@@ -112,6 +113,7 @@ def processCommandLineArguements():
     parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
     parser.add_argument("-c", "--concurrency", help="Set concurrency flag", action='store_true')
     parser.add_argument("-m", "--parallel", help="Set fuzzengine parallel flag ", action='store_true')
+    parser.add_argument("--sanitizer", help="AFL sanitizer flags (e.g., AFL_USE_ASAN=1, AFL_USE_MSAN=1, AFL_USE_UBSAN=1, AFL_USE_TSAN=1)")
 
     args = parser.parse_args()
     PROPERTY_FILE = args.propertyfile
@@ -119,6 +121,7 @@ def processCommandLineArguements():
     ARCHITECTURE = args.arch
     CONCURRENCY = args.concurrency
     PARALLEL_FUZZ = args.parallel
+    AFL_SANITIZER_FLAG = args.sanitizer
 
     if C_FILE is None:
         exitMessage = " C File is not found. Please Rerun the Tool with Appropriate Arguments."
@@ -238,7 +241,7 @@ def corpusContentChecking():
 
 # This function will run AFL++ with the pass and runtime library
 def runAFL():
-    global EBF_EXEX, C_FILE,category_property ,OUTDIR, EBFـINSTRUMENTATION, AFL_DIR, RUN_LOG, TIMEOUT_AFL, start_time, AFL_COMPILER_DIR, pre_C_File, AFL_Bin, AFL_FUZZ_Bin
+    global EBF_EXEX, C_FILE,category_property ,OUTDIR, EBFـINSTRUMENTATION, AFL_DIR, RUN_LOG, TIMEOUT_AFL, start_time, AFL_COMPILER_DIR, pre_C_File, AFL_Bin, AFL_FUZZ_Bin, AFL_SANITIZER_FLAG
     if category_property=='reach':
         extention_format=os.path.splitext(os.path.basename(C_FILE))[1]
         pre_C_File = EBF_DIR + SEP + "input"+extention_format
@@ -250,29 +253,41 @@ def runAFL():
         curTime = time.time()
         timeElapsed = curTime - start_time
         fuzzTime = float(TIMEOUT_AFL) - (timeElapsed) - 60
-        if (not ((os.path.isfile(EBF_LIB + SEP + "libmylib.a") == True) and (
-                os.path.isfile(EBF_LIB + SEP + "libmylibFunctions.a") == True))):
-            exitMessage = " Either libmylib.a or libmylibFunctions.a File doesn't exist in " + EBF_LIB + "!!"
+        if (not ((os.path.isfile(EBF_LIB + SEP + "libmylib.a") == True) and 
+            (os.path.isfile(EBF_LIB + SEP + "libmylibFunctions.a") == True))):
+            exitMessage = " Either libmylib.a or libmylibFunctions.a file doesn't exist in " + EBF_LIB + "!!"
             sys.exit(exitMessage)
-        aflFlags = "AFL_BENCH_UNTIL_CRASH=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_SKIP_CPUFREQ=1"
         if os.path.exists(AFL_DIR):
             shutil.rmtree(AFL_DIR)
         os.mkdir(AFL_DIR)
         exe = os.path.splitext(os.path.basename(C_FILE))[0] + "_AFL"
         aflExe = EBF_EXEX + SEP + exe
-        RunAfl = "AFL_CC=/usr/bin/clang-14 AFL_LLVM_THREADSAFE_INST=1 " + AFL_Bin + Optimization + Compile_Flags + EBFـINSTRUMENTATION + pre_C_File + " " + \
-                 " -lpthread " + "-L" + EBF_LIB + SEP + " -lmylib -lmylibFunctions " + ' -o ' + EBF_EXEX + SEP + exe + " 1> " + EBF_LOG + SEP + "AflCompile.log" + " 2> " + EBF_LOG + SEP + "AflCompileError.log"
-        os.system(RunAfl)
-        PARALLEL_FUZZ=''
-        if PARALLEL_FUZZ:
-            creatingPOol()
-        else:
-            logWord = "Invoking Fuzz Engine"
-            printLogWord(logWord)
-            ExecuteAfl = aflFlags + " timeout -k 2s " + str(
-                TIMEOUT_AFL) + " " + AFL_FUZZ_Bin + " -i  " + EBF_CORPUS + " -o " + AFL_DIR + " -m none -t 3000+ -- " + aflExe + ' ' + " 1> " + EBF_LOG + SEP + "AflRun.log" + " 2> " + EBF_LOG + SEP + "AflrunError.log"
-            setAflEnv()
-            os.system(ExecuteAfl)
+        # Compiling an executable for fuzzing
+        aflCompileEnvFlags = "AFL_CC=/usr/bin/clang-14 " + \
+                "AFL_LLVM_THREADSAFE_INST=1 " + \
+                AFL_SANITIZER_FLAG + " "
+        print("AFL sanitizer flag: " + AFL_SANITIZER_FLAG)
+        compileAflExeCmd = aflCompileEnvFlags + AFL_Bin + Optimization + \
+                Compile_Flags + EBFـINSTRUMENTATION + pre_C_File + " " + \
+                 " -lpthread " + "-L" + EBF_LIB + SEP + " -lmylib -lmylibFunctions " + \
+                 " -o " + EBF_EXEX + SEP + exe + \
+                 " 1> " + EBF_LOG + SEP + "AflCompile.log" + \
+                 " 2> " + EBF_LOG + SEP + "AflCompileError.log"
+        os.system(compileAflExeCmd)
+        # Running afl-fuzz here
+        logWord = "Invoking Fuzz Engine"
+        printLogWord(logWord)
+        aflExeFlags = "AFL_BENCH_UNTIL_CRASH=1 " + \
+                "AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 " + \
+                " AFL_SKIP_CPUFREQ=1"
+        runAflExeCmd = aflExeFlags + \
+                " timeout -k 2s " + str(TIMEOUT_AFL) + " " + \
+                AFL_FUZZ_Bin + " -i  " + EBF_CORPUS + " -o " + AFL_DIR + \
+                " -m none -t 3000+ -- " + aflExe + ' ' + \
+                " 1> " + EBF_LOG + SEP + "AflRun.log" + \
+                " 2> " + EBF_LOG + SEP + "AflrunError.log"
+        setAflEnv()
+        os.system(runAflExeCmd)
         with open(EBF_LOG + SEP + "AflrunError.log", 'r') as f:
             print("ErrorLog")
             out = f.read()
