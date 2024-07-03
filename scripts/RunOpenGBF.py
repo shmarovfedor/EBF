@@ -113,7 +113,7 @@ def processCommandLineArguements():
     parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
     parser.add_argument("-c", "--concurrency", help="Set concurrency flag", action='store_true')
     parser.add_argument("-m", "--parallel", help="Set fuzzengine parallel flag ", action='store_true')
-    parser.add_argument("--sanitizer", help="AFL sanitizer flags (e.g., AFL_USE_ASAN=1, AFL_USE_MSAN=1, AFL_USE_UBSAN=1, AFL_USE_TSAN=1)")
+    parser.add_argument("--sanitizer", default=" ", help="AFL sanitizer flags (e.g., AFL_USE_ASAN=1, AFL_USE_MSAN=1, AFL_USE_UBSAN=1, AFL_USE_TSAN=1)")
 
     args = parser.parse_args()
     PROPERTY_FILE = args.propertyfile
